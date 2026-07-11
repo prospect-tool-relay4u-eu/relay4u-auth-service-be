@@ -199,7 +199,7 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
 
         return new AuthenticationResponse(
-                jwtUtil.generateToken(authenticate.getName())
+                jwtUtil.generateToken(user)
         );
     }
 
