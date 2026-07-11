@@ -14,7 +14,7 @@
 | `email` | `user.getEmail()` |
 | `name` | `user.getName()` |
 | `iss` | `jwt.issuer` (default `https://auth.relay4u.eu`) |
-| `iat` / `exp` | issued-at / expiry (`jwt.expiration.in.hours`, default 24h) |
+| `iat` / `exp` | issued-at / expiry (`jwt.expiration.in.hours`, env `JWT_EXPIRATION_HOURS`, default **2h**) |
 | header `kid` | `auth-key-1` (constant) |
 
 `GET /.well-known/jwks.json` (`JwksController`) publishes the corresponding **public** key as a standard JWKS document (via `nimbus-jose-jwt`), keyed by the same `kid`. Any service can fetch this and validate tokens without ever holding the private key or a shared secret — see `eu-relay-4u-prospecting-be`'s [architecture doc](https://github.com/prospect-tool-relay4u-eu/prospect-tool-be) for the consumer side.
@@ -30,9 +30,23 @@ All constants come from `application.properties` and are overridable via environ
 | Verification code expiry | `verification.code.expiry-minutes` | 15 |
 | Max verification attempts (per code) | `verification.code.max-attempts` | 5 |
 | Max resends per rolling hour | `verification.resend.max-per-hour` | 3 |
-| JWT expiration | `jwt.expiration.in.hours` | 24 |
+| JWT expiration | `jwt.expiration.in.hours` (env `JWT_EXPIRATION_HOURS`) | 2 |
 
 Verification codes are 6 digits (`SecureRandom`), stored **only** as a SHA-256 hex hash (never in plaintext), and compared using `MessageDigest.isEqual` (constant-time, to resist timing attacks). The resend counter automatically resets once `lastResendAt` is more than an hour old.
+
+## Account reclaim (password-less / abandoned registrations)
+
+Some accounts can have `password = NULL` — either manually migrated as a safety net, or because a registration was started and never completed. `AuthServiceImpl` handles both cases without a dedicated public endpoint:
+
+- **`login()`**: if `user.getPassword() == null`, it throws `PasswordNotSetException` (→ `428 Precondition Required`, carrying `email`/`name`) *before* the lockout/verification checks — this account can never authenticate with a password until one is set.
+- **`register()`** (`resolveExistingUserForRegistration`): when the submitted email already has a row,
+  - if `existing.getPassword() == null` → the row is reused as-is (no rate limit — this is the intended recovery path), or
+  - if the existing registration is **stale-unverified** (`isStaleUnverified`: not yet verified *and* its verification code has expired) → the row is reused, but reclaim attempts are rate-limited via `enforceReclaimRateLimit` (same `maxResendPerHour` counter/window as verification-code resends) → `429 ResendRateLimitException` once exceeded, or
+  - otherwise (verified account, or unverified-but-code-still-valid) → `409 EmailAlreadyRegisteredException`, the email is genuinely taken.
+
+  In all reused-row cases, a brand new password, verification code and expiry are set, and `emailVerified` is reset to `false` — the user must re-verify their email even if the account was verified before.
+
+This exists so an abandoned or manually-migrated account never permanently locks its email address out, while still preventing someone from repeatedly "reclaiming" a real, active account.
 
 ## End-to-end flow
 

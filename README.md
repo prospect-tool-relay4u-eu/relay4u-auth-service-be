@@ -44,7 +44,7 @@ See [`documentation/architecture.md`](documentation/architecture.md) for the acc
 
 ## API reference
 
-Full interactive docs at `/swagger-ui.html`. Summary — see [`documentation/endpoints/`](documentation/README.md) for exact DTOs, status codes and sequence diagrams.
+Full interactive docs at `/swagger-ui.html` — **disabled in the `prod` profile** (`springdoc.api-docs.enabled=false` / `springdoc.swagger-ui.enabled=false`), so it's only available locally/sandbox. Summary — see [`documentation/endpoints/`](documentation/README.md) for exact DTOs, status codes and sequence diagrams.
 
 | Method | Path | Description |
 |---|---|---|
@@ -53,6 +53,15 @@ Full interactive docs at `/swagger-ui.html`. Summary — see [`documentation/end
 | POST | `/api/auth/verify-email` | Confirm email with a 6-digit code |
 | POST | `/api/auth/resend-verification` | Resend the verification code (rate-limited) |
 | GET | `/.well-known/jwks.json` | Public JWKS document, used by other services to validate issued JWTs |
+
+## Account recovery ("reclaim") for password-less accounts
+
+Accounts manually migrated with `password = NULL` (a safety-net path, not exposed through any endpoint) are handled specially:
+
+- **Login** on such an account returns `428 Precondition Required` (`PasswordNotSetException`) with the account's `email`/`name` in the response body, instead of a normal `401`. Consumers (e.g. the FE) use this to redirect the user into the registration flow to set a password.
+- **Registering again** with that same email is allowed and reuses the existing row (rather than failing with a "duplicate email" error) if the account has `password = NULL`, or if a previous registration was abandoned and its verification code has since expired (`EmailAlreadyRegisteredException` → `409` otherwise). Reclaim attempts on an abandoned-but-not-yet-expired registration are rate-limited the same way as verification-code resends.
+
+See [`documentation/architecture.md`](documentation/architecture.md) and [`documentation/endpoints/auth.md`](documentation/endpoints/auth.md) for the full lifecycle and exact status codes.
 
 ## Sandbox profile
 
@@ -65,7 +74,7 @@ docker build -t relay4u-auth-service-be .
 docker run -p 8081:8080 --env-file .env relay4u-auth-service-be
 ```
 
-Multi-stage build (`maven` → `eclipse-temurin:21-jre-alpine`), exposes port `8080` internally.
+Multi-stage build (`maven` → `eclipse-temurin:21-jre-alpine`), exposes port `8080` internally. The runtime image drops root and runs as a dedicated non-root `appuser`/`appgroup`.
 
 ## Documentation
 

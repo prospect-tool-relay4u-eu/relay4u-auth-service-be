@@ -15,6 +15,13 @@ Request validation (Bean Validation): `email` must be a valid email, `password` 
 
 **Registration does not return a token** — there is no auto-login. The client must call `/login` separately, and `/login` will reject unverified accounts (see below).
 
+**Additional `/register` response codes** (see [`architecture.md`](../architecture.md#account-reclaim-password-less--abandoned-registrations) for the full "reclaim" rationale):
+- `409 EmailAlreadyRegisteredException` — the email belongs to a verified account, or an unverified one whose verification code hasn't expired yet.
+- `429 ResendRateLimitException` — reclaiming an abandoned (unverified, code-expired) registration too many times within an hour.
+
+**Additional `/login` response code**:
+- `428 Precondition Required` (`PasswordNotSetException`, body includes `email`/`name`) — the account has `password = NULL` (manually migrated or never completed). Clients should redirect the user to complete registration/set a password instead of showing a generic "invalid credentials" error.
+
 ## Flow: register
 
 ```mermaid
@@ -27,9 +34,19 @@ sequenceDiagram
     C->>S: register(request)
     S->>S: validate password == confirmPassword
     S->>R: findUserByEmail(email)
-    Note over S: throws RegisterException (400) if mismatch or email taken
-    S->>S: hash password (Argon2 + pepper), generate 6-digit code, SHA-256 hash + expiry
-    S->>R: save(new User, emailVerified=false)
+    alt no existing row
+        S->>S: create new User
+    else existing row found
+        alt existing.password == null
+            S->>S: reuse row (reclaim, no rate limit)
+        else stale unverified (code expired)
+            S->>S: reuse row (reclaim, rate-limited: 429 if >3/hour)
+        else
+            S-->>C: throw EmailAlreadyRegisteredException (409)
+        end
+    end
+    S->>S: hash password (Argon2 + pepper), generate 6-digit code, SHA-256 hash + expiry, emailVerified=false
+    S->>R: save(User)
     S->>E: sendVerificationCode(email, code)
     S-->>C: UserDto (201)
 ```
@@ -49,6 +66,8 @@ sequenceDiagram
     C->>S: login(request)
     S->>R: findUserByEmail(email)
     Note over S: throws BadCredentialsException (401) if not found
+    S->>S: password == null?
+    Note over S: throws PasswordNotSetException (428) with email/name — reclaim path
     S->>S: isUserLocked? (accountLocked && lockTime not yet passed)
     Note over S: throws LockedException (423) if still locked
     Note over S: if lock expired, auto-unlocks (accountLocked=false, failedLoginAttempts=0)
