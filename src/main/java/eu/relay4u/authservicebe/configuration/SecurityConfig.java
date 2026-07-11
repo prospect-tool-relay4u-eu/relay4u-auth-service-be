@@ -31,6 +31,7 @@ public class SecurityConfig {
                         auth -> auth
                                 .requestMatchers(
                                         "/api/auth/**",
+                                        "/.well-known/jwks.json",
                                         "/error",
                                         "/swagger-ui/**",
                                         "/swagger-ui.html",

@@ -129,6 +129,12 @@
         </dependency>
 
         <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>10.0.2</version>
+        </dependency>
+
+        <dependency>
             <groupId>com.resend</groupId>
             <artifactId>resend-java</artifactId>
             <version>4.3.0</version>
@@ -197,14 +203,14 @@
                 <version>0.8.12</version>
                 <configuration>
                     <excludes>
-                        <exclude>eu/relay4u/prospecting/model/**</exclude>
-                        <exclude>eu/relay4u/prospecting/dto/**</exclude>
-                        <exclude>eu/relay4u/prospecting/EuRelay4uProspectingBeApplication.class</exclude>
-                        <exclude>eu/relay4u/prospecting/service/email/ResendEmailService.class</exclude>
-                        <exclude>eu/relay4u/prospecting/service/email/LoggingEmailService.class</exclude>
-                        <exclude>eu/relay4u/prospecting/mapper/**Impl.class</exclude>
-                        <exclude>eu/relay4u/prospecting/configuration/**</exclude>
-                        <exclude>eu/relay4u/prospecting/controller/HelloController.class</exclude>
+                        <exclude>eu/relay4u/authservicebe/model/**</exclude>
+                        <exclude>eu/relay4u/authservicebe/dto/**</exclude>
+                        <exclude>eu/relay4u/authservicebe/Relay4uAuthServiceBeApplication.class</exclude>
+                        <exclude>eu/relay4u/authservicebe/service/email/ResendEmailService.class</exclude>
+                        <exclude>eu/relay4u/authservicebe/service/email/LoggingEmailService.class</exclude>
+                        <exclude>eu/relay4u/authservicebe/mapper/**Impl.class</exclude>
+                        <exclude>eu/relay4u/authservicebe/configuration/**</exclude>
+                        <exclude>eu/relay4u/authservicebe/controller/JwksController.class</exclude>
                         <exclude>*$MockitoMock*</exclude>
                         <exclude>*$ByteBuddy*</exclude>
                     </excludes>
