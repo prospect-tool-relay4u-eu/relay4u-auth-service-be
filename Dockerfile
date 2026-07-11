@@ -7,6 +7,8 @@ RUN mvn package -DskipTests -q
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=build /app/target/relay4u-auth-service-be-*.jar app.jar
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+COPY --from=build --chown=appuser:appgroup /app/target/relay4u-auth-service-be-*.jar app.jar
+USER appuser
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
