@@ -57,7 +57,7 @@ jobs:
             --image "$IMAGE" \
             --region ${{ env.REGION }} \
             --platform managed \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
             --add-cloudsql-instances "${INSTANCE_CONN}" \
             --set-env-vars "^|^SPRING_PROFILES_ACTIVE=prod|DB_USERNAME=appuser|DB_URL=${DB_URL}|DB_PASSWORD=${DB_PASSWORD}|JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}|JWT_ISSUER=${JWT_ISSUER}|PASSWORD_PEPPER=${PASSWORD_PEPPER}|ALLOWED_ORIGINS=${ALLOWED_ORIGINS}|RESEND_API_KEY=${RESEND_API_KEY}|RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}" \
             --quiet
