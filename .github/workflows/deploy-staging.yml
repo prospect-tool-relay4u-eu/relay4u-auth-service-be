@@ -1,0 +1,63 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGION: europe-west1
+  REPO: relay4u-repo
+  SERVICE: relay4u-auth-be-staging
+  DB_NAME: relay4u_auth_staging
+  INSTANCE: relay4u-db
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - id: auth
+        uses: google-github-actions/auth@v2.1.7
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2.1.4
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push Docker image
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/relay4u-auth-be:${{ github.sha }}
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy to Cloud Run (Staging)
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/relay4u-auth-be:${{ github.sha }}
+          DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          JWT_PRIVATE_KEY: ${{ secrets.STAGING_JWT_PRIVATE_KEY }}
+          JWT_ISSUER: ${{ secrets.STAGING_JWT_ISSUER }}
+          PASSWORD_PEPPER: ${{ secrets.STAGING_PASSWORD_PEPPER }}
+          ALLOWED_ORIGINS: ${{ secrets.STAGING_ALLOWED_ORIGINS }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+        run: |
+          INSTANCE_CONN="${PROJECT_ID}:${{ env.REGION }}:${{ env.INSTANCE }}"
+          DB_URL="jdbc:postgresql:///${{ env.DB_NAME }}?cloudSqlInstance=${INSTANCE_CONN}&socketFactory=com.google.cloud.sql.postgres.SocketFactory"
+
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image "$IMAGE" \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --add-cloudsql-instances "${INSTANCE_CONN}" \
+            --set-env-vars "^|^SPRING_PROFILES_ACTIVE=prod|DB_USERNAME=appuser|DB_URL=${DB_URL}|DB_PASSWORD=${DB_PASSWORD}|JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}|JWT_ISSUER=${JWT_ISSUER}|PASSWORD_PEPPER=${PASSWORD_PEPPER}|ALLOWED_ORIGINS=${ALLOWED_ORIGINS}|RESEND_API_KEY=${RESEND_API_KEY}|RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}" \
+            --quiet

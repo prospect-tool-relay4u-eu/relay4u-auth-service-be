@@ -1,0 +1,61 @@
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGION: europe-west1
+  REPO: relay4u-repo
+  SERVICE: relay4u-auth-be-prod
+  DB_NAME: relay4u_auth_prod
+  INSTANCE: relay4u-db
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - id: auth
+        uses: google-github-actions/auth@v2.1.7
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2.1.4
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push Docker image
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/relay4u-auth-be:${{ github.ref_name }}
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy to Cloud Run (Production)
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/relay4u-auth-be:${{ github.ref_name }}
+          ALLOWED_ORIGINS: ${{ secrets.PROD_ALLOWED_ORIGINS }}
+        run: |
+          INSTANCE_CONN="${PROJECT_ID}:${{ env.REGION }}:${{ env.INSTANCE }}"
+          DB_URL="jdbc:postgresql:///${{ env.DB_NAME }}?cloudSqlInstance=${INSTANCE_CONN}&socketFactory=com.google.cloud.sql.postgres.SocketFactory"
+
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image "$IMAGE" \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --add-cloudsql-instances "${INSTANCE_CONN}" \
+            --set-env-vars "^|^SPRING_PROFILES_ACTIVE=prod|DB_USERNAME=appuser|DB_URL=${DB_URL}|ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
+            --set-secrets "DB_PASSWORD=AUTH_DB_PASSWORD_PROD:latest,JWT_PRIVATE_KEY=JWT_PRIVATE_KEY_PROD:latest,JWT_ISSUER=JWT_ISSUER_PROD:latest,PASSWORD_PEPPER=PASSWORD_PEPPER_PROD:latest,RESEND_API_KEY=RESEND_API_KEY:latest,RESEND_FROM_EMAIL=RESEND_FROM_EMAIL:latest" \
+            --min-instances 1 \
+            --max-instances 10 \
+            --quiet
