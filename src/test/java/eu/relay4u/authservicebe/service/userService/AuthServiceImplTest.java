@@ -64,6 +64,7 @@ class AuthServiceImplTest {
         user.setId(1L);
         user.setEmail("jane@example.com");
         user.setName("Jane Doe");
+        user.setPassword("encoded-existing-password");
         user.setEmailVerified(true);
         user.setAccountLocked(false);
         user.setFailedLoginAttempts(0);
@@ -109,12 +110,72 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void register_throwsRegisterException_whenEmailAlreadyRegistered() {
+    void register_throwsEmailAlreadyRegisteredException_whenActiveVerifiedAccountExists() {
         RegisterRequest request = new RegisterRequest("Jane Doe", "jane@example.com", "Passw0rd!", "Passw0rd!");
         when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> authService.register(request))
-                .isInstanceOf(RegisterException.class);
+                .isInstanceOf(EmailAlreadyRegisteredException.class);
+    }
+
+    @Test
+    void register_throwsEmailAlreadyRegisteredException_whenPendingClaimHasNotExpired() {
+        user.setEmailVerified(false);
+        user.setVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
+        RegisterRequest request = new RegisterRequest("Jane Doe", "jane@example.com", "Passw0rd!", "Passw0rd!");
+        when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(EmailAlreadyRegisteredException.class);
+    }
+
+    @Test
+    void register_allowsReclaim_whenExistingRegistrationIsAbandonedAndExpired() {
+        user.setEmailVerified(false);
+        user.setVerificationCodeExpiry(LocalDateTime.now().minusMinutes(1));
+        RegisterRequest request = new RegisterRequest("New Owner", "jane@example.com", "Passw0rd!", "Passw0rd!");
+        when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("Passw0rd!pepper123")).thenReturn("encoded-password");
+        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "New Owner", "jane@example.com"));
+
+        UserDto result = authService.register(request);
+
+        assertThat(result.email()).isEqualTo("jane@example.com");
+        assertThat(user.getName()).isEqualTo("New Owner");
+        verify(userRepository).save(user);
+        verify(userMapper, never()).toEntity(any(RegisterRequest.class));
+    }
+
+    @Test
+    void register_throwsResendRateLimitException_whenReclaimingTooManyTimesWithinHour() {
+        user.setEmailVerified(false);
+        user.setVerificationCodeExpiry(LocalDateTime.now().minusMinutes(1));
+        user.setResendCount(3);
+        user.setLastResendAt(LocalDateTime.now().minusMinutes(10));
+        RegisterRequest request = new RegisterRequest("New Owner", "jane@example.com", "Passw0rd!", "Passw0rd!");
+        when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(ResendRateLimitException.class);
+    }
+
+    @Test
+    void register_completesSetup_whenExistingUserHasNullPassword() {
+        user.setPassword(null);
+        RegisterRequest request = new RegisterRequest("Jane Updated", "jane@example.com", "NewPassw0rd!", "NewPassw0rd!");
+        when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("NewPassw0rd!pepper123")).thenReturn("encoded-new-password");
+        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "Jane Updated", "jane@example.com"));
+
+        UserDto result = authService.register(request);
+
+        assertThat(result.email()).isEqualTo("jane@example.com");
+        assertThat(user.getName()).isEqualTo("Jane Updated");
+        assertThat(user.getPassword()).isEqualTo("encoded-new-password");
+        assertThat(user.getEmailVerified()).isFalse();
+        verify(userRepository).save(user);
+        verify(userMapper, never()).toEntity(any(RegisterRequest.class));
+        verify(emailService).sendVerificationCode(eq("jane@example.com"), eq("Jane Updated"), any());
     }
 
     // ==================== login ====================
@@ -131,6 +192,18 @@ class AuthServiceImplTest {
         assertThat(response.token()).isEqualTo("jwt-token");
         assertThat(user.getFailedLoginAttempts()).isZero();
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void login_throwsPasswordNotSetException_whenPasswordIsNull() {
+        user.setPassword(null);
+        LoginRequest request = new LoginRequest("jane@example.com", "Passw0rd!");
+        when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(PasswordNotSetException.class);
+
+        verifyNoInteractions(authenticationManager);
     }
 
     @Test

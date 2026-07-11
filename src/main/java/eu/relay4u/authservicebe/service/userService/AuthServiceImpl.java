@@ -63,13 +63,17 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public UserDto register(RegisterRequest request) {
-        validRegisterData(request);
+        if (!request.password().equals(request.confirmPassword())) {
+            throw new RegisterException("Invalid register data");
+        }
 
-        User user = userMapper.toEntity(request);
+        User user = userRepository.findUserByEmail(request.email())
+                .map(existing -> resolveExistingUserForRegistration(existing, request))
+                .orElseGet(() -> userMapper.toEntity(request));
+
         user.setPassword(passwordEncoder.encode(request.password() + pepper));
         user.setEmailVerified(false);
         user.setVerificationAttempts(0);
-        user.setResendCount(0);
 
         String code = generateVerificationCode();
         user.setVerificationCode(hashVerificationCode(code));
@@ -82,11 +86,41 @@ public class AuthServiceImpl implements AuthService {
         return userMapper.toDto(user);
     }
 
-    private void validRegisterData(RegisterRequest request) {
-        if (!request.password().equals(request.confirmPassword())
-                || userRepository.findUserByEmail(request.email()).isPresent()) {
-            throw new RegisterException("Invalid register data");
+    /**
+     * An existing row is only reusable ("claimable") if it never had a password (manually
+     * migrated with {@code password IS NULL}), or if a previous registration attempt was
+     * abandoned and its verification code has since expired. Otherwise the email is genuinely
+     * taken. This stops an abandoned/never-verified registration from permanently locking an
+     * email out forever, while still rate-limiting repeated reclaim attempts.
+     */
+    private User resolveExistingUserForRegistration(User existing, RegisterRequest request) {
+        if (existing.getPassword() == null) {
+            existing.setResendCount(0);
+        } else if (isStaleUnverified(existing)) {
+            enforceReclaimRateLimit(existing);
+        } else {
+            throw new EmailAlreadyRegisteredException("An account with this email already exists.");
         }
+        existing.setName(request.name());
+        return existing;
+    }
+
+    private boolean isStaleUnverified(User user) {
+        return !Boolean.TRUE.equals(user.getEmailVerified())
+                && (user.getVerificationCodeExpiry() == null
+                    || LocalDateTime.now().isAfter(user.getVerificationCodeExpiry()));
+    }
+
+    private void enforceReclaimRateLimit(User user) {
+        LocalDateTime now = LocalDateTime.now();
+        if (user.getLastResendAt() == null || user.getLastResendAt().isBefore(now.minusHours(1))) {
+            user.setResendCount(0);
+        }
+        if (user.getResendCount() >= maxResendPerHour) {
+            throw new ResendRateLimitException("Code sending limit exceeded. Try again in an hour.");
+        }
+        user.setResendCount(user.getResendCount() + 1);
+        user.setLastResendAt(now);
     }
 
     @Override
@@ -94,6 +128,10 @@ public class AuthServiceImpl implements AuthService {
     public AuthenticationResponse login(LoginRequest request) {
         User user = userRepository.findUserByEmail(request.email())
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+
+        if (user.getPassword() == null) {
+            throw new PasswordNotSetException(user.getEmail(), user.getName());
+        }
 
         isUserLocked(user);
 

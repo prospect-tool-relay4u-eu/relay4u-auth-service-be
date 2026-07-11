@@ -64,6 +64,11 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
+    @ExceptionHandler(EmailAlreadyRegisteredException.class)
+    public ProblemDetail handleEmailAlreadyRegistered(EmailAlreadyRegisteredException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
     @ExceptionHandler(EmailNotVerifiedException.class)
     public ProblemDetail handleEmailNotVerified(EmailNotVerifiedException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
@@ -92,5 +97,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResendRateLimitException.class)
     public ProblemDetail handleResendRateLimit(ResendRateLimitException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+    }
+
+    @ExceptionHandler(PasswordNotSetException.class)
+    public ProblemDetail handlePasswordNotSet(PasswordNotSetException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_REQUIRED, ex.getMessage());
+        problem.setProperty("email", ex.getEmail());
+        problem.setProperty("name", ex.getName());
+        return problem;
     }
 }

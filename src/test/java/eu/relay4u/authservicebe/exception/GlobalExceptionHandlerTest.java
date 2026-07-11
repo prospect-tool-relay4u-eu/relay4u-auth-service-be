@@ -96,6 +96,15 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleEmailAlreadyRegistered_returns409WithMessage() {
+        ProblemDetail result = handler.handleEmailAlreadyRegistered(
+                new EmailAlreadyRegisteredException("An account with this email already exists."));
+
+        assertThat(result.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(result.getDetail()).isEqualTo("An account with this email already exists.");
+    }
+
+    @Test
     void handleEmailNotVerified_returns403WithMessage() {
         ProblemDetail result = handler.handleEmailNotVerified(new EmailNotVerifiedException("Account not verified."));
 
@@ -141,6 +150,15 @@ class GlobalExceptionHandlerTest {
 
         assertThat(result.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
         assertThat(result.getDetail()).isEqualTo("Too many resends.");
+    }
+
+    @Test
+    void handlePasswordNotSet_returns428WithEmailAndName() {
+        ProblemDetail result = handler.handlePasswordNotSet(new PasswordNotSetException("jane@example.com", "Jane Doe"));
+
+        assertThat(result.getStatus()).isEqualTo(HttpStatus.PRECONDITION_REQUIRED.value());
+        assertThat(result.getProperties()).containsEntry("email", "jane@example.com");
+        assertThat(result.getProperties()).containsEntry("name", "Jane Doe");
     }
 
     // --- Edge cases ---
