@@ -15,5 +15,5 @@ public interface AuthService {
 
     void verifyEmail(@Valid VerifyEmailRequest request);
 
-    void resendVerification(@Valid ResendVerificationRequest request);
+    UserDto resendVerification(@Valid ResendVerificationRequest request);
 }

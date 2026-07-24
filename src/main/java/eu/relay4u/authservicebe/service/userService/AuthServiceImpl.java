@@ -59,6 +59,9 @@ public class AuthServiceImpl implements AuthService {
     @Value("${verification.resend.max-per-hour}")
     private int maxResendPerHour;
 
+    @Value("${verification.expose-code-in-response}")
+    private boolean exposeVerificationCode;
+
 
     @Override
     @Transactional
@@ -83,7 +86,7 @@ public class AuthServiceImpl implements AuthService {
 
         emailService.sendVerificationCode(user.getEmail(), user.getName(), code);
 
-        return userMapper.toDto(user);
+        return withVerificationCodeIfExposed(userMapper.toDto(user), code);
     }
 
     /**
@@ -185,7 +188,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public void resendVerification(ResendVerificationRequest request) {
+    public UserDto resendVerification(ResendVerificationRequest request) {
         User user = userRepository.findUserByEmail(request.email())
                 .orElseThrow(() -> new RegisterException("Invalid credentials."));
 
@@ -211,6 +214,15 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
 
         emailService.sendVerificationCode(user.getEmail(), user.getName(), code);
+
+        return withVerificationCodeIfExposed(userMapper.toDto(user), code);
+    }
+
+    private UserDto withVerificationCodeIfExposed(UserDto dto, String code) {
+        if (!exposeVerificationCode) {
+            return dto;
+        }
+        return new UserDto(dto.id(), dto.name(), dto.email(), code);
     }
 
     private void isUserLocked(User user) {

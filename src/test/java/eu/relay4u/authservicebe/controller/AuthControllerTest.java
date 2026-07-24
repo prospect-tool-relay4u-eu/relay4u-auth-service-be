@@ -29,7 +29,7 @@ class AuthControllerTest {
     @Test
     void register_returns201WithCreatedUser() {
         RegisterRequest request = new RegisterRequest("Jane Doe", "jane@example.com", "Passw0rd!", "Passw0rd!");
-        UserDto userDto = new UserDto(1L, "Jane Doe", "jane@example.com");
+        UserDto userDto = new UserDto(1L, "Jane Doe", "jane@example.com", null);
         when(authService.register(request)).thenReturn(userDto);
 
         ResponseEntity<UserDto> response = authController.register(request);
@@ -63,10 +63,12 @@ class AuthControllerTest {
     @Test
     void resendVerification_returns200_andDelegatesToService() {
         ResendVerificationRequest request = new ResendVerificationRequest("jane@example.com");
+        UserDto userDto = new UserDto(1L, "Jane Doe", "jane@example.com", null);
+        when(authService.resendVerification(request)).thenReturn(userDto);
 
-        ResponseEntity<Void> response = authController.resendVerification(request);
+        ResponseEntity<UserDto> response = authController.resendVerification(request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(authService).resendVerification(request);
+        assertThat(response.getBody()).isEqualTo(userDto);
     }
 }

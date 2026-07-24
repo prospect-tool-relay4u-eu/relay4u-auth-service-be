@@ -6,6 +6,7 @@ import eu.relay4u.authservicebe.dto.login.LoginRequest;
 import eu.relay4u.authservicebe.dto.register.RegisterRequest;
 import eu.relay4u.authservicebe.model.User;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 @Mapper(config = MapperConfig.class)
 public interface UserMapper {
@@ -15,5 +16,6 @@ public interface UserMapper {
 
     User toEntity(LoginRequest request);
 
+    @Mapping(target = "verificationCode", ignore = true)
     UserDto toDto(User entity);
 }

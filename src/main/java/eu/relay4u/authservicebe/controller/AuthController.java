@@ -40,8 +40,7 @@ public class AuthController {
     }
 
     @PostMapping("/resend-verification")
-    public ResponseEntity<Void> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
-        authService.resendVerification(request);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<UserDto> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        return ResponseEntity.ok(authService.resendVerification(request));
     }
 }
