@@ -89,7 +89,7 @@ class AuthServiceImplTest {
         when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.empty());
         when(userMapper.toEntity(request)).thenReturn(user);
         when(passwordEncoder.encode("Passw0rd!pepper123")).thenReturn("encoded-password");
-        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "Jane Doe", "jane@example.com"));
+        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "Jane Doe", "jane@example.com", null));
 
         UserDto result = authService.register(request);
 
@@ -136,7 +136,7 @@ class AuthServiceImplTest {
         RegisterRequest request = new RegisterRequest("New Owner", "jane@example.com", "Passw0rd!", "Passw0rd!");
         when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.encode("Passw0rd!pepper123")).thenReturn("encoded-password");
-        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "New Owner", "jane@example.com"));
+        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "New Owner", "jane@example.com", null));
 
         UserDto result = authService.register(request);
 
@@ -165,7 +165,7 @@ class AuthServiceImplTest {
         RegisterRequest request = new RegisterRequest("Jane Updated", "jane@example.com", "NewPassw0rd!", "NewPassw0rd!");
         when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.encode("NewPassw0rd!pepper123")).thenReturn("encoded-new-password");
-        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "Jane Updated", "jane@example.com"));
+        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "Jane Updated", "jane@example.com", null));
 
         UserDto result = authService.register(request);
 
@@ -416,5 +416,51 @@ class AuthServiceImplTest {
         authService.resendVerification(request);
 
         assertThat(user.getResendCount()).isEqualTo(1);
+    }
+
+    // ==================== verification code exposure (staging) ====================
+
+    @Test
+    void register_omitsVerificationCode_whenExposureDisabled() {
+        ReflectionTestUtils.setField(authService, "exposeVerificationCode", false);
+        RegisterRequest request = new RegisterRequest("Jane Doe", "jane@example.com", "Passw0rd!", "Passw0rd!");
+        when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.empty());
+        when(userMapper.toEntity(request)).thenReturn(user);
+        when(passwordEncoder.encode("Passw0rd!pepper123")).thenReturn("encoded-password");
+        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "Jane Doe", "jane@example.com", null));
+
+        UserDto result = authService.register(request);
+
+        assertThat(result.verificationCode()).isNull();
+    }
+
+    @Test
+    void register_includesVerificationCode_whenExposureEnabled() {
+        ReflectionTestUtils.setField(authService, "exposeVerificationCode", true);
+        RegisterRequest request = new RegisterRequest("Jane Doe", "jane@example.com", "Passw0rd!", "Passw0rd!");
+        when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.empty());
+        when(userMapper.toEntity(request)).thenReturn(user);
+        when(passwordEncoder.encode("Passw0rd!pepper123")).thenReturn("encoded-password");
+        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "Jane Doe", "jane@example.com", null));
+
+        UserDto result = authService.register(request);
+
+        assertThat(result.verificationCode()).matches("\\d{6}");
+        assertThat(sha256Hex(result.verificationCode())).isEqualTo(user.getVerificationCode());
+    }
+
+    @Test
+    void resendVerification_includesVerificationCode_whenExposureEnabled() {
+        ReflectionTestUtils.setField(authService, "exposeVerificationCode", true);
+        user.setEmailVerified(false);
+        user.setResendCount(0);
+        ResendVerificationRequest request = new ResendVerificationRequest("jane@example.com");
+        when(userRepository.findUserByEmail("jane@example.com")).thenReturn(Optional.of(user));
+        when(userMapper.toDto(user)).thenReturn(new UserDto(1L, "Jane Doe", "jane@example.com", null));
+
+        UserDto result = authService.resendVerification(request);
+
+        assertThat(result.verificationCode()).matches("\\d{6}");
+        assertThat(sha256Hex(result.verificationCode())).isEqualTo(user.getVerificationCode());
     }
 }

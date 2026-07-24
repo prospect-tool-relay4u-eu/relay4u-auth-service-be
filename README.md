@@ -39,6 +39,7 @@ By default the app starts on port `8080`; set `server.port` (e.g. via `.env`) if
 | `PASSWORD_PEPPER` | Server-side pepper mixed into password hashing | dev default provided — override in production |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Resend transactional email | required unless using the `sandbox` profile |
 | `ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:4200` |
+| `VERIFICATION_EXPOSE_CODE` | Include the plaintext verification code in the `/register` and `/resend-verification` JSON response (`verificationCode` field) — lets testers verify accounts without reading real email. Set to `true` in local `.env` and on staging; **never set on production** | `false` |
 
 See [`documentation/architecture.md`](documentation/architecture.md) for the account-lockout and email-verification lifecycle constants (max attempts, expiry, rate limits).
 
@@ -75,6 +76,8 @@ docker run -p 8081:8080 --env-file .env relay4u-auth-service-be
 ```
 
 Multi-stage build (`maven` → `eclipse-temurin:21-jre-alpine`), exposes port `8080` internally. The runtime image drops root and runs as a dedicated non-root `appuser`/`appgroup`.
+
+`publish-docker.yml` publishes a public image to `ghcr.io/prospect-tool-relay4u-eu/relay4u-auth-be` on version tag push, for the [pentest sandbox](https://github.com/prospect-tool-relay4u-eu/prospect-tool-docker).
 
 ## Documentation
 
