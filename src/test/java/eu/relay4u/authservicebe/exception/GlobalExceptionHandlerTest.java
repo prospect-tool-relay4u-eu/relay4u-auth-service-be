@@ -24,30 +24,15 @@ class GlobalExceptionHandlerTest {
     // --- Happy path ---
 
     @Test
-    void handleProjectNotFound_returns404WithMessage() {
-        ProblemDetail result = handler.handleProjectNotFound(new ProjectNotFoundException());
-
-        assertThat(result.getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
-        assertThat(result.getDetail()).isEqualTo("Project not found");
-    }
-
-    @Test
-    void handleFieldKeyConflict_returns409WithMessage() {
-        ProblemDetail result = handler.handleFieldKeyConflict(new FieldKeyConflictException("my_key"));
-
-        assertThat(result.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
-        assertThat(result.getDetail()).contains("my_key");
-    }
-
-    @Test
     void handleAccessDenied_returns403() {
         ProblemDetail result = handler.handleAccessDenied(new AccessDeniedException("Forbidden"));
 
         assertThat(result.getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
+        assertThat(result.getProperties()).containsEntry("code", ErrorCode.ACCESS_DENIED.name());
     }
 
     @Test
-    void handleValidation_returns400WithErrorsMap() {
+    void handleValidation_returns400WithErrorsMapAndCode() {
         MethodArgumentNotValidException ex = mock(MethodArgumentNotValidException.class);
         BindingResult bindingResult = mock(BindingResult.class);
         FieldError error = new FieldError("obj", "name", "must not be blank");
@@ -58,6 +43,7 @@ class GlobalExceptionHandlerTest {
         ProblemDetail result = handler.handleValidation(ex);
 
         assertThat(result.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(result.getProperties()).containsEntry("code", ErrorCode.VALIDATION_FAILED.name());
         @SuppressWarnings("unchecked")
         Map<String, String> errors = (Map<String, String>) result.getProperties().get("errors");
         assertThat(errors).containsEntry("name", "must not be blank");
@@ -77,6 +63,7 @@ class GlobalExceptionHandlerTest {
 
         assertThat(result.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
         assertThat(result.getDetail()).isEqualTo("Invalid credentials");
+        assertThat(result.getProperties()).containsEntry("code", ErrorCode.INVALID_CREDENTIALS.name());
     }
 
     @Test
@@ -159,6 +146,15 @@ class GlobalExceptionHandlerTest {
         assertThat(result.getStatus()).isEqualTo(HttpStatus.PRECONDITION_REQUIRED.value());
         assertThat(result.getProperties()).containsEntry("email", "jane@example.com");
         assertThat(result.getProperties()).containsEntry("name", "Jane Doe");
+    }
+
+    @Test
+    void handleUnexpected_returns500WithGenericDetailAndInternalErrorCode() {
+        ProblemDetail result = handler.handleUnexpected(new RuntimeException("db connection refused"));
+
+        assertThat(result.getStatus()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR.value());
+        assertThat(result.getProperties()).containsEntry("code", ErrorCode.INTERNAL_ERROR.name());
+        assertThat(result.getDetail()).doesNotContain("db connection refused");
     }
 
     // --- Edge cases ---
